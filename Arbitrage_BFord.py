@@ -127,6 +127,47 @@ def compute_cycle_profit(cycle, graph_matrix):
     profit_ratio = math.exp(-total_weight)
     return profit_ratio, total_weight
 
+def bellman_ford_all(currencies, edges, source):
+    """
+    Extended Bellman-Ford to collect all vertices that can still be relaxed.
+    Returns (dist, pred, neg_cycle_vertices).
+    """
+    n = len(currencies)
+    dist = [float('inf')] * n
+    pred = [-1] * n
+    dist[source] = 0
+
+    for _ in range(n - 1):
+        updated = False
+        for u, v, w in edges:
+            if dist[u] + w < dist[v]:
+                dist[v] = dist[u] + w
+                pred[v] = u
+                updated = True
+        if not updated:
+            break
+
+    neg_cycle_vertices = []
+    for u, v, w in edges:
+        if dist[u] + w < dist[v]:
+            neg_cycle_vertices.append(v)
+            pred[v] = u
+    return dist, pred, neg_cycle_vertices
+
+
+def normalize_cycle(cycle):
+    """
+    Rotate cycle so that the smallest vertex index is first and
+    return as a tuple (with last equal to first).
+    """
+    if cycle[0] == cycle[-1]:
+        cycle = cycle[:-1]
+    # find rotation point
+    min_idx = min(range(len(cycle)), key=lambda i: cycle[i])
+    rotated = cycle[min_idx:] + cycle[:min_idx]
+    rotated.append(rotated[0])
+    return tuple(rotated)
+
 def main():
     filename = "full_exchange_rates_matrix_top20.csv"
     currencies, rates_matrix = parseRates(filename)
