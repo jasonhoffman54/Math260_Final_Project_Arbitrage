@@ -56,7 +56,17 @@ def visualizeGraph(graph, currencies):
     plt.axis('off')
     plt.show()
 
-
+def build_edge_list(graph_matrix):
+    """
+    Converts the graph matrix into a list of edges (i, j, weight) for Bellman-Ford.
+    """
+    n = graph_matrix.shape[0]
+    edges = []
+    for i in range(n):
+        for j in range(n):
+            if i != j and not np.isinf(graph_matrix[i, j]):
+                edges.append((i, j, graph_matrix[i, j]))
+    return edges
 
 def main():
     filename = "full_exchange_rates_matrix_top20.csv"
@@ -64,7 +74,10 @@ def main():
     print("Currencies found:", currencies)
     
     graph_matrix = buildGraph(rates_matrix)
-    visualizeGraph(graph_matrix, currencies)
 
+    edges = build_edge_list(graph_matrix)
+    print(f"Built edge list with {len(edges)} edges for Bellman-Ford.")
+    visualizeGraph(graph_matrix, currencies)
+    
 if __name__ == "__main__":
     main()
