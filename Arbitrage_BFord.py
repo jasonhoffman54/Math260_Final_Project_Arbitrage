@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import networkx as nx
+import math
 
 
 def parseRates(filename):
@@ -68,6 +69,64 @@ def build_edge_list(graph_matrix):
                 edges.append((i, j, graph_matrix[i, j]))
     return edges
 
+def bellman_ford(currencies, edges, source):
+    """
+    Basic Bellman-Ford implementation to detect one negative cycle from a source.
+    Returns (dist, pred, negative_cycle_vertex).
+    """
+    n = len(currencies)
+    dist = [float('inf')] * n
+    pred = [-1] * n
+    dist[source] = 0
+
+    # Relax edges |V|-1 times
+    for _ in range(n - 1):
+        for u, v, w in edges:
+            if dist[u] + w < dist[v]:
+                dist[v] = dist[u] + w
+                pred[v] = u
+
+    # Check for negative cycle
+    negative_cycle = None
+    for u, v, w in edges:
+        if dist[u] + w < dist[v]:
+            negative_cycle = v
+            pred[v] = u
+            break
+
+    return dist, pred, negative_cycle
+
+def reconstruct_negative_cycle(pred, start):
+    """
+    Reconstructs a negative cycle from pred starting at 'start'.
+    """
+    n = len(pred)
+    curr = start
+    # Move into the cycle
+    for _ in range(n):
+        curr = pred[curr]
+    cycle_start = curr
+    cycle = [cycle_start]
+    curr = pred[cycle_start]
+    while curr != cycle_start:
+        cycle.append(curr)
+        curr = pred[curr]
+    cycle.append(cycle_start)
+    cycle.reverse()
+    return cycle
+
+def compute_cycle_profit(cycle, graph_matrix):
+    """
+    Computes profit ratio = exp(-sum of weights) for a cycle.
+    """
+    total_weight = 0.0
+    for i in range(len(cycle) - 1):
+        u = cycle[i]
+        v = cycle[i + 1]
+        total_weight += graph_matrix[u, v]
+    profit_ratio = math.exp(-total_weight)
+    return profit_ratio, total_weight
+
 def main():
     filename = "full_exchange_rates_matrix_top20.csv"
     currencies, rates_matrix = parseRates(filename)
@@ -78,6 +137,6 @@ def main():
     edges = build_edge_list(graph_matrix)
     print(f"Built edge list with {len(edges)} edges for Bellman-Ford.")
     visualizeGraph(graph_matrix, currencies)
-    
+
 if __name__ == "__main__":
     main()
