@@ -29,32 +29,68 @@ def buildGraph(rateData):
         raise ValueError("Exchange rates matrix contains zero(s); cannot take log(0).")
     return -np.log(rateData)
 
-def visualizeGraph(graph, currencies):
+def visualizeGraph(currencies, graph_matrix, cycle=None):
+    """
+    Draws the full exchange‐rate graph and optionally highlights an arbitrage cycle.
+    """
     G = nx.DiGraph()
     n = len(currencies)
-    for i, currency in enumerate(currencies):
-        G.add_node(i, label=currency)
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                weight = graph[i, j]
-                if not np.isinf(weight):
-                    G.add_edge(i, j, weight=weight)
-    
-    finite_weights = [data['weight'] for _, _, data in G.edges(data=True) if np.isfinite(data['weight'])]
-    min_weight = min(finite_weights) if finite_weights else 0.0
+    for i, curr in enumerate(currencies):
+        G.add_node(i, label=curr)
+    for u, v, w in build_edge_list(graph_matrix):
+        G.add_edge(u, v, weight=w)
+
+    # Shift weights for layout
+    finite_ws = [d['weight'] for _,_,d in G.edges(data=True)]
+    min_w = min(finite_ws) if finite_ws else 0.0
     H = G.copy()
-    for _, _, data in H.edges(data=True):
-        data['layout_weight'] = data['weight'] - min_weight
+    for u, v, d in H.edges(data=True):
+        d['layout_weight'] = d['weight'] - min_w
 
+    try:
+        pos = nx.kamada_kawai_layout(H, weight='layout_weight')
+    except Exception as e:
+        print("KK layout failed, using spring:", e)
+        pos = nx.spring_layout(G, seed=42, k=1.0, iterations=1000)
 
-    pos = nx.kamada_kawai_layout(H, weight='layout_weight')
-    
-    nx.draw_networkx_nodes(G, pos, node_size=200, node_color='lightblue')
+    # Draw nodes
+    nx.draw_networkx_nodes(G, pos,
+                           node_size=400, node_color='lightblue',
+                           edgecolors='black')
     labels = {i: currencies[i] for i in range(n)}
-    nx.draw_networkx_labels(G, pos, labels, font_size=6)
-    plt.title("Exchange Rate Graph")
+    nx.draw_networkx_labels(G, pos,
+                            labels, font_size=8, font_weight='bold')
+
+    # Highlight cycle edges
+    edges_list = list(G.edges())
+    cycle_edges = set()
+    if cycle:
+        cycle_edges = {(cycle[i], cycle[i+1]) for i in range(len(cycle)-1)}
+    edge_colors = ['red' if (u,v) in cycle_edges else 'gray'
+                   for (u,v) in edges_list]
+    widths = [2.5 if (u,v) in cycle_edges else 0.7
+              for (u,v) in edges_list]
+
+    nx.draw_networkx_edges(
+        G, pos,
+        edgelist=edges_list,
+        edge_color=edge_colors,
+        width=widths,
+        arrows=True,
+        arrowstyle='-|>',
+        arrowsize=10
+    )
+
+    # Title with profit ratio
+    if cycle:
+        total_w = sum(graph_matrix[u,v] for u,v in cycle_edges)
+        profit = math.exp(-total_w)
+        title = f"Best Arbitrage Cycle (×{profit:.4f})"
+    else:
+        title = "Exchange Rate Graph"
+    plt.title(title)
     plt.axis('off')
+    plt.tight_layout()
     plt.show()
 
 def build_edge_list(graph_matrix):
@@ -174,10 +210,35 @@ def main():
     print("Currencies found:", currencies)
     
     graph_matrix = buildGraph(rates_matrix)
-
     edges = build_edge_list(graph_matrix)
-    print(f"Built edge list with {len(edges)} edges for Bellman-Ford.")
-    visualizeGraph(graph_matrix, currencies)
+
+
+    n = len(currencies)
+    best_cycle = None
+    best_profit = 1.0001
+    cycle_cache = {}
+
+    # Try each currency as source
+    for source in range(n):
+        _, pred, neg_vertices = bellman_ford_all(currencies, edges, source)
+        for v in set(neg_vertices):
+            cycle = reconstruct_negative_cycle(pred, v)
+            norm = normalize_cycle(cycle)
+            if norm in cycle_cache:
+                continue
+            profit, _ = compute_cycle_profit(cycle, graph_matrix)
+            cycle_cache[norm] = profit
+            if profit > best_profit:
+                best_profit = profit
+                best_cycle = cycle
+
+    if best_cycle:
+        print("Best arbitrage cycle:", [currencies[i] for i in best_cycle])
+        print(f"Profit ratio: {best_profit:.4f}")
+        visualizeGraph(currencies, graph_matrix, best_cycle)
+    else:
+        print("No arbitrage opportunity detected.")
+        visualizeGraph(currencies, graph_matrix)
 
 if __name__ == "__main__":
     main()
